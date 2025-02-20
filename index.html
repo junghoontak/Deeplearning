@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>딥러닝 설명 데모: 제한된 자유곡선 맞추기</title>
+  <style>
+    body {
+      text-align: center;
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    canvas {
+      border: 1px solid #333;
+      touch-action: none; /* 모바일 터치 스크롤 방지 */
+    }
+  </style>
+</head>
+<body>
+  <h1>딥러닝 설명 데모: 제한된 자유곡선 맞추기</h1>
+  <p>
+    데이터 포인트는 <code>y = 2x</code> 주변에 분산되어 있습니다.<br>
+    원점(빨간 점)에서 시작해 손가락(또는 마우스)으로 선을 그리세요.<br>
+    선의 전체 길이가 450픽셀에 도달하면 더 이상 그릴 수 없습니다.
+  </p>
+  <canvas id="canvas" width="600" height="600"></canvas>
+  <p>Score: <span id="score">-</span></p>
+  <button id="reset">그림 리셋</button>
+
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const scoreDisplay = document.getElementById('score');
+    const resetBtn = document.getElementById('reset');
+
+    const canvasWidth = canvas.width;
+    const canvasHeight = canvas.height;
+    const margin = 50;
+    // 캔버스에서 원점의 위치 (왼쪽 아래)
+    const origin = { x: margin, y: canvasHeight - margin };
+    // 모델 좌표를 캔버스 좌표로 변환하는 스케일 (1단위당 20픽셀)
+    const scale = 20;
+    // 최대 드래그(그림) 길이 (픽셀)
+    const maxDrawingLength = 450;
+
+    // 데이터 포인트: x는 0~10, y = 2x + 노이즈 (노이즈 범위를 [-3, 3])
+    const dataPoints = [];
+    const numPoints = 50;
+    (function generateData() {
+      for (let i = 0; i < numPoints; i++) {
+        const x = Math.random() * 10;
+        const noise = Math.random() * 6 - 3; // [-3, 3]
+        const y = 2 * x + noise;
+        dataPoints.push({ x, y });
+      }
+    })();
+
+    // 사용자가 그린 선을 저장 (캔버스 좌표)
+    let drawnPath = [];
+    let isDrawing = false;
+    
+    function clearDrawing() {
+      drawnPath = [];
+      draw();
+      updateScore();
+    }
+    
+    // 캔버스에 데이터 포인트, 원점, 그리고 사용자가 그린 선을 그립니다.
+    function draw() {
+      ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+      
+      // (옵션) 축 그리기
+      ctx.strokeStyle = '#ccc';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      // x축
+      ctx.moveTo(0, origin.y);
+      ctx.lineTo(canvasWidth, origin.y);
+      // y축
+      ctx.moveTo(origin.x, 0);
+      ctx.lineTo(origin.x, canvasHeight);
+      ctx.stroke();
+      
+      // 데이터 포인트 그리기 (파란 원)
+      ctx.fillStyle = 'blue';
+      for (const pt of dataPoints) {
+        const canvasX = origin.x + pt.x * scale;
+        const canvasY = origin.y - pt.y * scale;
+        ctx.beginPath();
+        ctx.arc(canvasX, canvasY, 4, 0, 2 * Math.PI);
+        ctx.fill();
+      }
+      
+      // 원점 표시 (빨간 점)
+      ctx.fillStyle = 'red';
+      ctx.beginPath();
+      ctx.arc(origin.x, origin.y, 6, 0, 2 * Math.PI);
+      ctx.fill();
+      
+      // 사용자가 그린 선 (폴리라인) 그리기 (녹색)
+      if (drawnPath.length > 0) {
+        ctx.strokeStyle = 'green';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(drawnPath[0].x, drawnPath[0].y);
+        for (let i = 1; i < drawnPath.length; i++) {
+          ctx.lineTo(drawnPath[i].x, drawnPath[i].y);
+        }
+        ctx.stroke();
+      }
+    }
+    
+    // 두 점 사이 거리를 계산하는 함수
+    function distance(a, b) {
+      return Math.hypot(b.x - a.x, b.y - a.y);
+    }
+    
+    // drawnPath의 전체 길이를 계산합니다.
+    function getPathLength() {
+      let len = 0;
+      for (let i = 1; i < drawnPath.length; i++) {
+        len += distance(drawnPath[i-1], drawnPath[i]);
+      }
+      return len;
+    }
+    
+    // 점과 선분(두 점 A, B) 사이의 최소 거리를 구하는 함수
+    function pointToSegmentDistance(px, py, ax, ay, bx, by) {
+      const dx = bx - ax;
+      const dy = by - ay;
+      if (dx === 0 && dy === 0) {
+        return Math.hypot(px - ax, py - ay);
+      }
+      let t = ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy);
+      t = Math.max(0, Math.min(1, t));
+      const closestX = ax + t * dx;
+      const closestY = ay + t * dy;
+      return Math.hypot(px - closestX, py - closestY);
+    }
+    
+    // 각 데이터 포인트(모델 좌표를 캔버스 좌표로 변환)와 사용자가 그린 선(폴리라인) 사이의 최소 거리를 평균하여 score로 계산합니다.
+    function computeScore() {
+      if (drawnPath.length < 2) return null;
+      let totalError = 0;
+      for (const pt of dataPoints) {
+        // 모델 좌표 → 캔버스 좌표 변환
+        const cx = origin.x + pt.x * scale;
+        const cy = origin.y - pt.y * scale;
+        let minDist = Infinity;
+        // drawnPath의 인접한 점들 사이 선분과의 최소 거리 계산
+        for (let i = 0; i < drawnPath.length - 1; i++) {
+          const A = drawnPath[i];
+          const B = drawnPath[i + 1];
+          const dist = pointToSegmentDistance(cx, cy, A.x, A.y, B.x, B.y);
+          if (dist < minDist) {
+            minDist = dist;
+          }
+        }
+        totalError += minDist;
+      }
+      return totalError / dataPoints.length;
+    }
+    
+    function updateScore() {
+      const score = computeScore();
+      scoreDisplay.textContent = score === null ? '-' : score.toFixed(3);
+    }
+    
+    // 포인터 이벤트 핸들러: 원점에서 시작하여 자유롭게 드래그하여 선을 그립니다.
+    canvas.addEventListener('pointerdown', (e) => {
+      if (isDrawing) return;
+      isDrawing = true;
+      clearDrawing();
+      // 원점에서 시작
+      drawnPath.push({ x: origin.x, y: origin.y });
+      addPoint(e);
+    });
+    
+    canvas.addEventListener('pointermove', (e) => {
+      if (!isDrawing) return;
+      addPoint(e);
+    });
+    
+    canvas.addEventListener('pointerup', (e) => {
+      if (!isDrawing) return;
+      addPoint(e);
+      isDrawing = false;
+      updateScore();
+    });
+    
+    // 새 좌표를 추가하는 함수 (최대 드래그 길이를 제한)
+    function addPoint(e) {
+      const rect = canvas.getBoundingClientRect();
+      const newX = e.clientX - rect.left;
+      const newY = e.clientY - rect.top;
+      const lastPoint = drawnPath[drawnPath.length - 1];
+      const dx = newX - lastPoint.x;
+      const dy = newY - lastPoint.y;
+      const segmentLength = Math.hypot(dx, dy);
+      const currentLength = getPathLength();
+      
+      if (currentLength + segmentLength >= maxDrawingLength) {
+        // 남은 길이에 맞게 보간하여 최종 점을 추가합니다.
+        const remaining = maxDrawingLength - currentLength;
+        const fraction = remaining / segmentLength;
+        const finalX = lastPoint.x + dx * fraction;
+        const finalY = lastPoint.y + dy * fraction;
+        drawnPath.push({ x: finalX, y: finalY });
+        draw();
+        updateScore();
+        isDrawing = false;
+      } else {
+        drawnPath.push({ x: newX, y: newY });
+        draw();
+        updateScore();
+      }
+    }
+    
+    // "그림 리셋" 버튼은 그린 선만 초기화 (데이터는 그대로 유지)
+    resetBtn.addEventListener('click', () => {
+      clearDrawing();
+    });
+    
+    // 초기 화면 그리기
+    draw();
+    updateScore();
+  </script>
+</body>
+</html>
