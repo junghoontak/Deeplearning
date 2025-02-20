@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>딥러닝 설명 데모: 축에 눈금 추가</title>
+  <title>딥러닝 설명 데모: 축에 눈금 및 격자 추가</title>
   <style>
     body {
       text-align: center;
@@ -16,7 +16,7 @@
   </style>
 </head>
 <body>
-  <h1>딥러닝 설명 데모: 축에 눈금 추가</h1>
+  <h1>딥러닝 설명 데모: 축에 눈금 및 격자 추가</h1>
   <p>
     데이터 포인트는 <code>y = 2x</code> 주변에 분산되어 있습니다.<br>
     원점(빨간 점)에서 시작해 손가락(또는 마우스)으로 선을 그리세요.<br>
@@ -64,9 +64,33 @@
       updateScore();
     }
     
-    // 캔버스에 데이터 포인트, 축, 원점, 그리고 사용자가 그린 선을 그립니다.
+    // 캔버스에 데이터 포인트, 격자, 축, 원점, 그리고 사용자가 그린 선을 그립니다.
     function draw() {
       ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+      
+      // 격자 그리기 (배경 그리드)
+      ctx.strokeStyle = '#eee';
+      ctx.lineWidth = 1;
+      
+      // 수직 격자선: 원점부터 오른쪽으로 (1단위마다)
+      let maxGridX = Math.floor((canvasWidth - origin.x) / scale);
+      for (let i = 0; i <= maxGridX; i++) {
+        let xPos = origin.x + i * scale;
+        ctx.beginPath();
+        ctx.moveTo(xPos, 0);
+        ctx.lineTo(xPos, canvasHeight);
+        ctx.stroke();
+      }
+      
+      // 수평 격자선: 원점부터 위쪽으로 (1단위마다)
+      let maxGridY = Math.floor(origin.y / scale);
+      for (let j = 0; j <= maxGridY; j++) {
+        let yPos = origin.y - j * scale;
+        ctx.beginPath();
+        ctx.moveTo(0, yPos);
+        ctx.lineTo(canvasWidth, yPos);
+        ctx.stroke();
+      }
       
       // 축 그리기
       ctx.strokeStyle = '#ccc';
@@ -257,3 +281,4 @@
   </script>
 </body>
 </html>
+
