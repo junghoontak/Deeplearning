@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>딥러닝 설명 데모: 제한된 자유곡선 맞추기</title>
+  <title>딥러닝 설명 데모: 축에 눈금 추가</title>
   <style>
     body {
       text-align: center;
@@ -16,7 +16,7 @@
   </style>
 </head>
 <body>
-  <h1>딥러닝 설명 데모: 제한된 자유곡선 맞추기</h1>
+  <h1>딥러닝 설명 데모: 축에 눈금 추가</h1>
   <p>
     데이터 포인트는 <code>y = 2x</code> 주변에 분산되어 있습니다.<br>
     원점(빨간 점)에서 시작해 손가락(또는 마우스)으로 선을 그리세요.<br>
@@ -64,11 +64,11 @@
       updateScore();
     }
     
-    // 캔버스에 데이터 포인트, 원점, 그리고 사용자가 그린 선을 그립니다.
+    // 캔버스에 데이터 포인트, 축, 원점, 그리고 사용자가 그린 선을 그립니다.
     function draw() {
       ctx.clearRect(0, 0, canvasWidth, canvasHeight);
       
-      // (옵션) 축 그리기
+      // 축 그리기
       ctx.strokeStyle = '#ccc';
       ctx.lineWidth = 1;
       ctx.beginPath();
@@ -79,6 +79,37 @@
       ctx.moveTo(origin.x, 0);
       ctx.lineTo(origin.x, canvasHeight);
       ctx.stroke();
+
+      // 축 눈금 및 숫자 표시
+      const tickLen = 5;
+      ctx.font = '12px Arial';
+      ctx.fillStyle = '#333';
+      
+      // x축 (원점부터 오른쪽)
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      let maxX = Math.floor((canvasWidth - origin.x) / scale);
+      for (let i = 0; i <= maxX; i++) {
+        let xPos = origin.x + i * scale;
+        ctx.beginPath();
+        ctx.moveTo(xPos, origin.y - tickLen);
+        ctx.lineTo(xPos, origin.y + tickLen);
+        ctx.stroke();
+        ctx.fillText(i, xPos, origin.y + tickLen + 2);
+      }
+      
+      // y축 (원점부터 위쪽)
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      let maxY = Math.floor(origin.y / scale);
+      for (let j = 0; j <= maxY; j++) {
+        let yPos = origin.y - j * scale;
+        ctx.beginPath();
+        ctx.moveTo(origin.x - tickLen, yPos);
+        ctx.lineTo(origin.x + tickLen, yPos);
+        ctx.stroke();
+        ctx.fillText(j, origin.x - tickLen - 2, yPos);
+      }
       
       // 데이터 포인트 그리기 (파란 원)
       ctx.fillStyle = 'blue';
